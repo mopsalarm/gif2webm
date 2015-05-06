@@ -164,4 +164,5 @@ def gif2webm(gif):
 # avconv -r 25 -i frame.%04d.ppm -c:v libvpx -f webm -b:v 400k -qmin 20 -qmax 42 -an -y output.webm
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", debug=True, use_reloader=False, threaded=True)
+    app.run(host="0.0.0.0", threaded=True)
+    
