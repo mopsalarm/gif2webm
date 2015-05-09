@@ -2,7 +2,6 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import contextlib
 import hashlib
 import os
 import re
@@ -10,6 +9,7 @@ import shutil
 import subprocess
 import uuid
 from base64 import urlsafe_b64decode
+from contextlib import closing, contextmanager
 
 import pathlib
 import requests
@@ -47,10 +47,8 @@ class WebmCache(BlockingPool):
             return path_webm
 
         # downloads the gif and stores it into a file
-        content = download_file(gif_url)
-        print("writing {} byte gif to file".format(len(content)))
-        with path_gif.open("wb") as fp:
-            fp.write(content)
+        download_file(gif_url, path_gif)
+        print("wrote {} byte gif to file".format(path_gif.stat().st_size))
 
         try:
             # now convert the gif file
@@ -70,11 +68,13 @@ def build_identifier(url):
     return hashlib.md5(url).hexdigest()
 
 
-def download_file(url):
+def download_file(url, target):
     #: :type: requests.Response
-    response = requests.get(url)
+    response = requests.get(url, stream=True)
     response.raise_for_status()
-    return response.content
+
+    with closing(response.raw) as raw, target.open("wb") as fp:
+        shutil.copyfileobj(raw, fp)
 
 
 def extract_gif_fps(gif):
@@ -87,7 +87,7 @@ def extract_gif_fps(gif):
     return min(60, max(1, 1 / max(0.01, float(match.group(1)))))
 
 
-@contextlib.contextmanager
+@contextmanager
 def gif2webm(gif):
     temp = b"/tmp/" + str(uuid.uuid4())
     os.mkdir(temp)
@@ -113,8 +113,12 @@ def gif2webm(gif):
 
 
 def make_app():
+    output_path = pathlib.Path("webm")
+    if not output_path.exists():
+        raise IOError("output path {} must exists".format(output_path.absolute()))
+
     app = Flask(__name__)
-    cache = WebmCache(pathlib.Path("webm"))
+    cache = WebmCache(output_path)
 
     def _convert(encoded_url):
         gif_url = urlsafe_b64decode(encoded_url.encode("ascii"))
