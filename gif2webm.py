@@ -11,11 +11,25 @@ import uuid
 from base64 import urlsafe_b64decode
 from contextlib import closing, contextmanager
 
+import datadog
 import pathlib
 import requests
 from concurrent import futures
 from flask import abort, jsonify, send_file, Flask
+
+from PIL import Image
+
 from pool import BlockingPool, FileJob
+
+
+print("initialize datadog metrics")
+datadog.initialize()
+stats = datadog.ThreadStats()
+stats.start()
+
+
+def metric_name(suffix):
+    return "pr0gramm.gif2vid.%s" % suffix
 
 
 class WebmCache(BlockingPool):
@@ -68,6 +82,7 @@ def build_identifier(url):
     return hashlib.md5(url).hexdigest()
 
 
+@stats.timed(metric_name("convert.download"))
 def download_file(url, target):
     #: :type: requests.Response
     response = requests.get(url, stream=True)
@@ -77,38 +92,67 @@ def download_file(url, target):
         shutil.copyfileobj(raw, fp)
 
 
-def extract_gif_fps(gif):
-    # try to get the frame rate from the gif file
-    output = subprocess.check_output(["gifsicle", "-I", str(gif)])
-    match = re.search("delay ([0-9.]+)", output)
-    if not match:
-        return 10.0
+@stats.timed(metric_name("convert.encode"))
+def encode_as_webm(tempdir, fps):
+    subprocess.check_call(cwd=tempdir, args=[
+        "avconv", "-r", str(int(fps)), "-i", "frame.%04d.ppm", "-c:v", "libvpx", "-f", "webm",
+        "-b:v", "400k", "-qmin", "20", "-qmax", "42", "-an",
+        "-y", "video.webm"])
 
-    return min(60, max(1, 1 / max(0.01, float(match.group(1)))))
+
+def iter_image_frames(image):
+    while image:
+        yield image
+        try:
+            image.seek(image.tell() + 1)
+        except EOFError:
+            break
+
+
+def median(frame_durations):
+    return sorted(frame_durations)[len(frame_durations) // 2]
+
+
+@stats.timed(metric_name("convert.frames"))
+def convert_gif_to_frames(gif, output_directory):
+    """Convert the file to a sequence of frames which are stored in the
+    output directory. This function also estimates the frames per seconds
+    of the gif.
+    """
+
+    source = Image.open(str(gif))
+
+    frame_durations = []
+    target = Image.new("RGB", source.size, (0, 0, 0))
+    for idx, frame in enumerate(iter_image_frames(source)):
+        target.paste(source, None)
+        target.save(os.path.join(output_directory, "frame.%04d.ppm" % idx))
+
+        # store the frame duration
+        duration = frame.info.get("duration")
+        frame_durations.append(duration or 100)
+
+    # calculate median fps of the gif video
+    media_frame_duration = median(frame_durations) if frame_durations else 100
+    return min(60, max(1, 1000 / media_frame_duration))
 
 
 @contextmanager
+@stats.timed(metric_name("convert"))
 def gif2webm(gif):
     temp = b"/tmp/" + str(uuid.uuid4())
     os.mkdir(temp)
     try:
-        print("trying to get fps from gif")
-        fps = extract_gif_fps(gif)
-
         print("converting gif to frames")
-        subprocess.check_call(cwd=temp, args=[
-            "convert", "-adjoin", "-coalesce", str(gif.absolute()), "frame.%04d.ppm"])
+        fps = convert_gif_to_frames(gif, temp)
 
         print("converting frames to webm at {:1.2f}fps".format(fps))
-        subprocess.check_call(cwd=temp, args=[
-            "avconv", "-r", str(int(fps)), "-i", "frame.%04d.ppm", "-c:v", "libvpx", "-f", "webm",
-            "-b:v", "400k", "-qmin", "20", "-qmax", "42", "-an",
-            "-y", "video.webm"])
+        encode_as_webm(temp, fps)
 
         yield pathlib.Path(temp) / "video.webm"
 
     finally:
-        print("removing temporary data")
+        print("removing temporary data at", temp)
         shutil.rmtree(temp)
 
 
@@ -123,11 +167,13 @@ def make_app():
     def _convert(encoded_url):
         gif_url = urlsafe_b64decode(encoded_url.encode("ascii"))
         if not re.match(r"https?://[^/]*pr0gramm\.com/[^?#]+\.gif", gif_url.lower()):
+            stats.increment(metric_name("error.invalid_url"))
             print("Invalid url")
             raise abort(403)
 
         webm_path_future = cache.get(gif_url)
         if webm_path_future.exception():
+            stats.increment(metric_name("error.convert"))
             print("Got exception during conversion: {}".format(webm_path_future.exception()))
             raise abort(500)
 
@@ -137,12 +183,14 @@ def make_app():
 
 
     @app.route('/convert/<encoded_url>')
+    @stats.timed(metric_name("lookup.convert"))
     def convert(encoded_url):
         _convert(encoded_url)
         return jsonify(path="/webm/{}/video.webm".format(encoded_url))
 
 
     @app.route("/webm/<encoded_url>/video.webm")
+    @stats.timed(metric_name("lookup.video"))
     def webm(encoded_url):
         webm_path = _convert(encoded_url)
         return send_file(str(webm_path), mimetype="video/webm")
