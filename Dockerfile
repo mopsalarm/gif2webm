@@ -7,5 +7,5 @@ RUN xz -d /tmp/ffmpeg.tar.xz && tar -xC/usr/bin -f /tmp/ffmpeg.tar
 # videos are placed at /usr/src/app/webm
 CMD python gif2webm.py
 
-EXPOSE 8080
+EXPOSE 5000
 
