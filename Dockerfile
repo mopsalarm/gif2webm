@@ -1,10 +1,11 @@
 from python:2-onbuild
 MAINTAINER Mopsalarm
 
-RUN apt-get update && apt-get install -y --force-yes libav-tools && apt-get clean
+ADD http://johnvansickle.com/ffmpeg/releases/ffmpeg-release-64bit-static.tar.xz /tmp/ffmpeg.tar.xz
+RUN xz -d /tmp/ffmpeg.tar.xz && tar -xC/usr/bin -f /tmp/ffmpeg.tar
 
 # videos are placed at /usr/src/app/webm
 CMD python gif2webm.py
 
-EXPOSE 5000
+EXPOSE 8080
 
