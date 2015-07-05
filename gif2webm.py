@@ -1,9 +1,6 @@
 from __future__ import division
 from __future__ import unicode_literals
 
-import gevent.monkey
-gevent.monkey.patch_all(subprocess=True, Event=True)
-
 import os
 import shutil
 import tempfile
@@ -43,6 +40,9 @@ def make_video(url, target):
 
         # and move to target
         shutil.copy(temp_output, str(target))
+    except:
+        stats.increment(metric_name("error"))
+        raise
 
     finally:
         for temp in temp_gif, temp_output:
@@ -111,7 +111,3 @@ def video_route(url):
 @bottle.get("/status")
 def status():
     return dict(alive=True)
-
-
-if __name__ == "__main__":
-    bottle.run(server="gevent", host="0.0.0.0", port=5000, debug=True)
