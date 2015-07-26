@@ -1,2 +1,0 @@
-#!/bin/sh
-apk --update add tar xz curl
