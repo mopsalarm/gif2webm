@@ -2,9 +2,6 @@ argparse==1.2.1
 bottle==0.12.8
 datadog==0.6.0
 decorator==3.4.2
-futures==3.0.3
-gevent==1.0.2
+gevent==1.1a2
 greenlet==0.4.7
 pathlib==1.0.1
-simplejson==3.7.3
-wsgiref==0.1.2

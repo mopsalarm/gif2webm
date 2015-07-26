@@ -1,11 +1,14 @@
-from python:2-onbuild
+FROM gliderlabs/python-runtime:3.4
 MAINTAINER Mopsalarm
 
-ADD http://johnvansickle.com/ffmpeg/releases/ffmpeg-release-64bit-static.tar.xz /tmp/ffmpeg.tar.xz
-RUN xz -d /tmp/ffmpeg.tar.xz && tar -xC/usr/bin -f /tmp/ffmpeg.tar --strip-components 1
+RUN curl http://johnvansickle.com/ffmpeg/releases/ffmpeg-release-64bit-static.tar.xz \
+    | xz -d \
+    | tar xC /usr/bin --strip-components=1 \
+    && rm /usr/bin/ffserver \
+    && rm /usr/bin/ffmpeg \
+    && rm /usr/bin/ffmpeg-10bit
 
 # videos are placed at /usr/src/app/webm
-CMD python -m bottle -s wsgiref -b 0.0.0.0:5000 gif2webm
+CMD PYTHONPATH=/app /env/bin/python -m bottle -s wsgiref -b 0.0.0.0:5000 gif2webm
 
 EXPOSE 5000
-

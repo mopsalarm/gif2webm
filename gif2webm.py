@@ -1,6 +1,3 @@
-from __future__ import division
-from __future__ import unicode_literals
-
 import os
 import shutil
 import tempfile
@@ -83,7 +80,7 @@ converter = Converter()
 
 
 def convert(url):
-    url = base64.urlsafe_b64decode(url.encode("ascii")).strip()
+    url = base64.urlsafe_b64decode(url.encode("ascii")).strip().decode("utf8")
     if not re.match("^https?://[^/]*pr0gramm.com/.*$", url):
         return bottle.abort(403)
 
@@ -95,7 +92,7 @@ def convert(url):
 @bottle.get("/convert/:url")
 def convert_route(url):
     convert(url)
-    bottle.response.add_header(b"Cache-Control", b"max-age=31556926")
+    bottle.response.add_header("Cache-Control", "max-age=31556926")
     return dict(path="/webm/{}/video.webm".format(url))
 
 
@@ -104,7 +101,7 @@ def video_route(url):
     stats.increment(metric_name("request"))
 
     response = bottle.static_file(convert(url), os.path.abspath("."), mimetype="video/webm")
-    response.set_header(b"Cache-Control", b"max-age=31556926")
+    response.set_header("Cache-Control", "max-age=31556926")
     return response
 
 
