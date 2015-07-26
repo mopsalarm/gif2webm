@@ -5,7 +5,7 @@ RUN curl http://johnvansickle.com/ffmpeg/releases/ffmpeg-release-64bit-static.ta
     | xz -d \
     | tar xC /usr/bin --strip-components=1 \
     && rm /usr/bin/ffserver \
-    && rm /usr/bin/ffmpeg \
+    && rm /usr/bin/ffprobe \
     && rm /usr/bin/ffmpeg-10bit
 
 # videos are placed at /usr/src/app/webm
