@@ -28,10 +28,12 @@ def make_video(url, target):
     temp_output = tempfile.mktemp(suffix=".webm")
     try:
         # download file
-        # subprocess.check_call(["curl", "-o", temp_gif, url])
+        subprocess.check_call(["timeout", "-s", "KILL", "5s",
+                               "curl", "-o", temp_gif, url])
 
         # and convert
-        subprocess.check_call(["ffmpeg", "-i", url, "-c:v", "libvpx", "-f", "webm",
+        subprocess.check_call(["timeout", "-s", "KILL", "30s",
+                               "ffmpeg", "-i", temp_gif, "-c:v", "libvpx", "-f", "webm",
                                "-b:v", "400k", "-qmin", "20", "-qmax", "42", "-an",
                                "-y", temp_output])
 
