@@ -12,10 +12,13 @@ import pathlib
 from concurrent.futures import ThreadPoolExecutor
 
 
-# initialize datadog
 datadog.initialize()
 stats = datadog.ThreadStats()
 stats.start()
+
+
+class VideoNotConvertedError(Exception):
+    pass
 
 
 def metric_name(suffix):
@@ -31,14 +34,22 @@ def make_video(url, target):
         subprocess.check_call(["timeout", "-s", "KILL", "5s",
                                "curl", "-o", temp_gif, url])
 
+        ffprobe_output = subprocess.check_output(
+            ["timeout", "-s", "KILL", "5s", "ffprobe", "-show_packets", temp_gif])
+
+        frame_count = ffprobe_output.count(b"codec_type=video")
+        if frame_count <= 5:
+            return False
+
         # and convert
         subprocess.check_call(["timeout", "-s", "KILL", "30s",
                                "ffmpeg", "-i", temp_gif, "-c:v", "libvpx", "-f", "webm",
-                               "-b:v", "400k", "-qmin", "20", "-qmax", "42", "-an",
+                               "-b:v", "350k", "-qmin", "20", "-qmax", "42", "-an",
                                "-y", temp_output])
 
         # and move to target
         shutil.copy(temp_output, str(target))
+        return True
     except:
         stats.increment(metric_name("error"))
         raise
@@ -66,14 +77,15 @@ class Converter(object):
             try:
                 return self.jobs[url]
             except KeyError:
-                future = self.pool.submit(self._video, url)
+                future = self.pool.submit(self._convert_in_background, url)
                 self.jobs[url] = future
                 return future
 
-    def _video(self, url):
+    def _convert_in_background(self, url):
         target = self.images / re.sub("[^a-z0-9]", "_", url.lower())
         if not target.exists() or not target.stat().st_size:
-            make_video(url, target)
+            if not make_video(url, target):
+                raise VideoNotConvertedError()
 
         return target
 
