@@ -28,7 +28,7 @@ def metric_name(suffix):
 @stats.timed(metric_name("convert"))
 def make_video(url, target):
     temp_gif = tempfile.mktemp(suffix=".gif")
-    temp_output = tempfile.mktemp(suffix=".webm")
+    temp_output = tempfile.mktemp(suffix=".mp4")
     try:
         # download file
         subprocess.check_call(["timeout", "-s", "KILL", "5s",
@@ -43,9 +43,10 @@ def make_video(url, target):
 
         # and convert
         subprocess.check_call(["timeout", "-s", "KILL", "30s",
-                               "ffmpeg", "-i", temp_gif, "-c:v", "libvpx", "-f", "webm",
-                               "-b:v", "350k", "-qmin", "20", "-qmax", "42", "-an",
-                               "-y", temp_output])
+                               "ffmpeg", "-y", "-i", temp_gif, "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+                               "-codec:v", "libx264", "-preset", "medium", "-b:v", "350k", "-an",
+                               "-profile:v", "baseline", "-level", "3.0", "-pix_fmt", "yuv420p",
+                               "-qmin", "20", "-qmax", "42", temp_output])
 
         # and move to target
         shutil.copy(temp_output, str(target))
@@ -57,7 +58,8 @@ def make_video(url, target):
     finally:
         for temp in temp_gif, temp_output:
             try:
-                os.unlink(temp)
+                pass
+                # os.unlink(temp)
             except OSError:
                 pass
 
@@ -114,7 +116,7 @@ def convert_route(url):
 def video_route(url):
     stats.increment(metric_name("request"))
 
-    response = bottle.static_file(convert(url), os.path.abspath("."), mimetype="video/webm")
+    response = bottle.static_file(convert(url), os.path.abspath("."), mimetype="video/mp4")
     response.set_header("Cache-Control", "max-age=31556926")
     return response
 
