@@ -58,8 +58,7 @@ def make_video(url, target):
     finally:
         for temp in temp_gif, temp_output:
             try:
-                pass
-                # os.unlink(temp)
+                os.unlink(temp)
             except OSError:
                 pass
 
